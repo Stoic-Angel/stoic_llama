@@ -43,25 +43,32 @@ def test_mimetype_prioritizes_data():
 
 
 def test_hash():
-    assert (
-        MediaResource(
-            data=b"test bytes",
-            path=Path("foo/bar/baz"),
-            url=AnyUrl("http://example.com"),
-            text="some text",
-        ).hash
-        == "04414a5f03ad7fa055229b4d3690d47427cb0b65bc7eb8f770d1ecbd54ab4909"
+    # Test that MediaResource with content generates a hash (hash will be different with new implementation)
+    full_resource = MediaResource(
+        data=b"test bytes",
+        path=Path("foo/bar/baz"),
+        url=AnyUrl("http://example.com"),
+        text="some text",
     )
-    # Test that empty MediaResource returns None
-    assert MediaResource().hash is None
+    assert full_resource.hash is not None
+    assert full_resource.hash != ""
+    assert isinstance(full_resource.hash, str)
+    assert len(full_resource.hash) == 64  # SHA256 hex string length
 
-    # Test that MediaResource with empty content still generates a hash
-    assert MediaResource(text="").hash is not None
-    assert MediaResource(text="").hash != ""
+    # Test that empty MediaResource ALWAYS returns a hash (never None)
+    assert MediaResource().hash is not None
+    assert MediaResource().hash != ""
+    assert isinstance(MediaResource().hash, str)
 
-    # Test that MediaResource with None values but some content generates a hash
-    assert MediaResource(text="", data=b"").hash is not None
-    assert MediaResource(text="", data=b"").hash != ""
+    # Test that MediaResource with empty content generates a different hash than None
+    empty_text_resource = MediaResource(text="")
+    none_text_resource = MediaResource(text=None)
+    assert empty_text_resource.hash != none_text_resource.hash
+
+    # Test that MediaResource with mixed empty/None generates a hash
+    mixed_resource = MediaResource(text="", data=b"")
+    assert mixed_resource.hash is not None
+    assert mixed_resource.hash != ""
 
 
 def test_hash_edge_cases():
@@ -70,30 +77,37 @@ def test_hash_edge_cases():
     empty_text = MediaResource(text="")
     assert empty_text.hash is not None
     assert empty_text.hash != ""
+    assert isinstance(empty_text.hash, str)
 
     # Test with only data (empty bytes)
     empty_data = MediaResource(data=b"")
     assert empty_data.hash is not None
     assert empty_data.hash != ""
+    assert isinstance(empty_data.hash, str)
 
     # Test with only path
     path_only = MediaResource(path=Path("test.txt"))
     assert path_only.hash is not None
     assert path_only.hash != ""
+    assert isinstance(path_only.hash, str)
 
     # Test with only URL
     url_only = MediaResource(url=AnyUrl("http://example.com"))
     assert url_only.hash is not None
     assert url_only.hash != ""
+    assert isinstance(url_only.hash, str)
 
     # Test with mixed None and empty values
     mixed_empty = MediaResource(text="", data=None, path=None, url=None)
     assert mixed_empty.hash is not None
     assert mixed_empty.hash != ""
+    assert isinstance(mixed_empty.hash, str)
 
-    # Test with all None values
+    # Test with all None values - NOW ALWAYS RETURNS A HASH
     all_none = MediaResource(text=None, data=None, path=None, url=None)
-    assert all_none.hash is None
+    assert all_none.hash is not None
+    assert all_none.hash != ""
+    assert isinstance(all_none.hash, str)
 
 
 def test_hash_consistency():
@@ -107,8 +121,31 @@ def test_hash_consistency():
     resource3 = MediaResource(text="hello", data=b"different")
     assert resource1.hash != resource3.hash
 
-    # Empty resources should all return None
+    # Empty resources should all return the SAME hash (not None)
     empty1 = MediaResource()
     empty2 = MediaResource()
-    assert empty1.hash is None
-    assert empty2.hash is None
+    assert empty1.hash == empty2.hash
+    assert empty1.hash is not None
+    assert empty2.hash is not None
+
+
+def test_hash_none_vs_empty_distinction():
+    """Test the key requirement: None vs empty string distinction."""
+    # This is what the reviewer wanted - different hashes for None vs empty
+    resource_none = MediaResource(text=None)
+    resource_empty = MediaResource(text="")
+
+    # These should be different hashes
+    assert resource_none.hash != resource_empty.hash
+    assert resource_none.hash is not None
+    assert resource_empty.hash is not None
+
+    # Test with data field too
+    data_none = MediaResource(data=None)
+    data_empty = MediaResource(data=b"")
+    assert data_none.hash != data_empty.hash
+
+    # Test completely empty vs partially empty
+    completely_empty = MediaResource()  # All None
+    text_empty_only = MediaResource(text="")  # text empty, others None
+    assert completely_empty.hash != text_empty_only.hash

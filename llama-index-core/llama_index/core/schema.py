@@ -583,38 +583,33 @@ class MediaResource(BaseModel):
         return str(path)
 
     @property
-    def hash(self) -> str | None:
+    def hash(self) -> str:
         """
         Generate a hash to uniquely identify the media resource.
 
-        The hash is generated based on the available content (data, path, text or url).
-        Returns None if no content is available, or a hash string if content exists.
+        The hash is generated based on the complete state of the resource,
+        distinguishing between None, empty, and content values.
+        Always returns a hash string.
         """
-        bits: list[str] = []
-        has_content = False
+        # Create state dictionary that preserves None vs empty distinctions
+        state = {
+            "text": self.text,  # Could be None, "", or content
+            "data": self.data.hex()
+            if self.data is not None
+            else None,  # Convert bytes to hex or None
+            "path": str(self.path)
+            if self.path is not None
+            else None,  # Convert Path to string or None
+            "url": str(self.url)
+            if self.url is not None
+            else None,  # Convert URL to string or None
+        }
 
-        if self.text is not None:
-            bits.append(self.text)
-            has_content = True
-        if self.data is not None:
-            # Hash the binary data if available
-            bits.append(str(sha256(self.data).hexdigest()))
-            has_content = True
-        if self.path is not None:
-            # Hash the file path if provided
-            bits.append(str(sha256(str(self.path).encode("utf-8")).hexdigest()))
-            has_content = True
-        if self.url is not None:
-            # Use the URL string as basis for hash
-            bits.append(str(sha256(str(self.url).encode("utf-8")).hexdigest()))
-            has_content = True
+        # Create deterministic JSON representation
+        state_json = json.dumps(state, sort_keys=True, separators=(",", ":"))
 
-        # Return None if no content is available
-        if not has_content:
-            return None
-
-        doc_identity = "".join(bits)
-        return str(sha256(doc_identity.encode("utf-8", "surrogatepass")).hexdigest())
+        # Generate hash from the JSON representation
+        return str(sha256(state_json.encode("utf-8")).hexdigest())
 
 
 class Node(BaseNode):
@@ -684,23 +679,15 @@ class Node(BaseNode):
         if metadata_str:
             doc_identities.append(metadata_str)
 
-        # Only add resource hashes if they exist and have content
+        # Always add resource hashes since they now always return strings
         if self.audio_resource is not None:
-            hash_val = self.audio_resource.hash
-            if hash_val is not None:
-                doc_identities.append(hash_val)
+            doc_identities.append(self.audio_resource.hash)
         if self.image_resource is not None:
-            hash_val = self.image_resource.hash
-            if hash_val is not None:
-                doc_identities.append(hash_val)
+            doc_identities.append(self.image_resource.hash)
         if self.text_resource is not None:
-            hash_val = self.text_resource.hash
-            if hash_val is not None:
-                doc_identities.append(hash_val)
+            doc_identities.append(self.text_resource.hash)
         if self.video_resource is not None:
-            hash_val = self.video_resource.hash
-            if hash_val is not None:
-                doc_identities.append(hash_val)
+            doc_identities.append(self.video_resource.hash)
 
         doc_identity = "-".join(doc_identities)
         return str(sha256(doc_identity.encode("utf-8", "surrogatepass")).hexdigest())
